@@ -1,74 +1,54 @@
-require("dotenv").config();
-const express = require("express");
-const axios = require("axios");
-const cors = require("cors");
+// Load environment variables from .env file
+require('dotenv').config();
+
+const express = require('express');
+const axios = require('axios');
+const cors = require('cors');
 
 const app = express();
 const port = 3000;
 
+// Enable CORS for all routes
 app.use(cors());
 
+// Access the API key from the environment variables
 const apiKey = process.env.MEDIASTACK_API_KEY;
 
 if (!apiKey) {
   console.error("❌ ERROR: MEDIASTACK_API_KEY is missing in .env file!");
-  process.exit(1);
+  process.exit(1); // Stop execution if API key is missing
 }
 
-// Cache mechanism to avoid hitting API rate limits
-let cachedArticles = null;
-let lastFetchTime = 0;
-const CACHE_DURATION = 10 * 60 * 1000; // Cache for 10 minutes
+// Set up a basic route
+app.get('/', (req, res) => {
+  res.send('Welcome to the News Aggregator API!');
+});
 
-// API route to fetch news
-app.get("/api/news", async (req, res) => {
+// News route with category & country filtering
+app.get('/api/news', async (req, res) => {
   try {
-    const { category, country } = req.query;
+    const { category, country } = req.query; // Get query params from frontend
 
+    // Validate inputs (optional but recommended)
     if (!country) {
       return res.status(400).json({ error: "Missing 'country' parameter" });
     }
 
-    // Check if cached data is still valid
-    if (cachedArticles && Date.now() - lastFetchTime < CACHE_DURATION) {
-      console.log("✅ Serving cached news data");
-      return res.json({ data: cachedArticles });
-    }
-
-    console.log("🌍 Fetching fresh news data from Mediastack API...");
-
-    // Fetch fresh news data
-    const response = await axios.get("http://api.mediastack.com/v1/news", {
+    // Fetch news data from NewsAPI
+    const response = await axios.get('http://api.mediastack.com/v1/news', {
       params: {
-        access_key: apiKey,
-        countries: country,
-        categories: category || "general",
-        limit: 10,
+        access_key: apiKey, // Use correct API key
+        countries: country, // Use 'countries' instead of 'country'
+        categories: category || 'general', // Use 'categories' instead of 'category'
+        limit: 10, // Limit results to 10 articles
       },
     });
 
-    // Check if response is valid
-    if (!response.data || !response.data.data || response.data.data.length === 0) {
-      throw new Error("Invalid API response: No articles found.");
-    }
-
-    // Store articles in cache
-    cachedArticles = response.data.data;
-    lastFetchTime = Date.now();
-
-    res.json({ data: cachedArticles });
+    // Send the fetched news data back as a JSON response
+    res.json(response.data);
   } catch (error) {
     console.error("❌ ERROR Fetching News:", error.message);
-
-    if (error.response && error.response.status === 429) {
-      res.status(429).json({
-        message: "Too many requests. Please try again later.",
-      });
-    } else {
-      res.status(500).json({
-        message: "Error fetching news data. Try again later.",
-      });
-    }
+    res.status(500).json({ message: "Error fetching news data" });
   }
 });
 
